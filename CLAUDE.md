@@ -76,3 +76,26 @@ AppScope/                      # Application-wide config (app.json5)
 - UI built with declarative syntax: components return builder methods, not JSX
 - State management: `@State`, `@Prop`, `@Link` decorators
 - Lifecycle hooks: `onCreate`, `onDestroy`, `onForeground`, `onBackground`
+
+## Mastermind (密码机) Game Rules
+
+### Core Rules
+- **Goal**: Crack a 4-color secret code
+- **Feedback**:
+  - 🟢 **Green**: Correct color AND correct position
+  - 🟡 **Yellow**: Correct color but wrong position
+  - ⚪ **Gray**: Color not in code
+
+### Hint Modes
+
+| Mode | Position | Description |
+|------|----------|-------------|
+| **Simple (easy)** | Bottom (2x2 grid) | Shows which specific position is correct/wrong |
+| **Hard (hard)** | Right side (2x2 grid) | Only shows count, not which position |
+
+### Implementation
+
+- **Level.hintPosition**: `'bottom'` (simple) or `'right'` (hard)
+- **Level.hintMode**: `'mapped'` (simple) or `'unmapped'` (hard)
+- **GuessRow**: Adjusts layout based on `hintPosition`
+- **HintIndicator**: Simplified display for hard mode (count only)

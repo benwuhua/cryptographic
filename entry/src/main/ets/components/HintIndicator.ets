@@ -2,9 +2,14 @@
  * 提示指示器组件
  * 显示绿（位置颜色都正确）、黄（颜色正确位置错误）、灰（未猜中）提示点
  *
- * 支持两种模式:
- * - Mapped模式（初级）: 提示与槽位一一对应，第N个提示点表示第N个槽位的结果
- * - Unmapped模式（高级）: 提示不与槽位对应，只显示数量
+ * 支持两种提示位置：
+ * - bottom: 提示在密码下方（简单模式，对应每个位置，2x2网格）
+ * - right: 提示在右侧（困难模式，只显示数量，1x4或2x2网格）
+ *
+ * 提示含义：
+ * - 🟢 绿色：颜色和位置都对
+ * - 🟡 黄色：颜色对但位置错
+ * - ⚪ 灰色：颜色不在密码中
  */
 
 import { HintColors } from '../constants/Colors';
@@ -17,117 +22,89 @@ export struct HintIndicator {
   @Prop positionHints?: PositionHint[];  // 位置级别的提示（mapped模式）
   @Prop dotSize: number = 12;      // 提示点大小
   @Prop maxDots: number = 4;       // 最大显示点数
-
-  // 缓存生成的提示点类型数组
-  private hintDots: string[] = [];
-
-  aboutToAppear() {
-    this.hintDots = this.generateHintDots();
-  }
-
-  /**
-   * 创建单个提示条
-   */
-  @Builder
-  HintBar(dotType: string, index: number) {
-    if (index < this.maxDots && index < this.hintDots.length) {
-      // 使用矩形条代替圆形
-      Row()
-        .width(20)  // 条形宽度
-        .height(6)  // 条形高度（更扁平）
-        .backgroundColor(this.getHintColor(dotType))
-        .borderRadius(3)  // 圆角让条形更美观
-        .border({ width: 0.5, color: '#757575' })
-    }
-  }
+  @Prop hintPosition: 'bottom' | 'right' = 'right';  // 提示位置
 
   build() {
-    // 使用Row + Column创建2x2网格布局显示条形提示
-    Column({ space: 4 }) {
-      ForEach([0, 1], (row: number) => {
-        Row({ space: 4 }) {
-          ForEach([0, 1], (col: number) => {
-            // 计算索引 - 直接传参不声明变量
-            this.HintBar(this.hintDots[row * 2 + col], row * 2 + col)
-          }, (col: number) => `hint_row_${row}_col_${col}`)
+    if (this.hintPosition === 'bottom') {
+      // 简单模式：提示在下方，2x2网格，对应每个位置
+      Column({ space: 3 }) {
+        Row({ space: 3 }) {
+          ForEach([0, 1], (index: number) => {
+            this.HintDot(this.getDotColorByIndex(index), index)
+          })
         }
-        .justifyContent(FlexAlign.Start)
-      }, (row: number) => `hint_row_${row}`)
+        Row({ space: 3 }) {
+          ForEach([2, 3], (index: number) => {
+            this.HintDot(this.getDotColorByIndex(index), index)
+          })
+        }
+      }
+      .justifyContent(FlexAlign.Center)
+    } else {
+      // 困难模式：提示在右侧，2x2网格，只显示数量
+      // 不按位置显示，只显示总数
+      Column({ space: 3 }) {
+        Row({ space: 3 }) {
+          this.HintDot(this.getTotalHitColor(), 0)
+          this.HintDot(this.getTotalHitColor(), 1)
+        }
+        Row({ space: 3 }) {
+          this.HintDot(this.getTotalHitColor(), 2)
+          this.HintDot(this.getTotalHitColor(), 3)
+        }
+      }
+      .justifyContent(FlexAlign.Center)
     }
-    .justifyContent(FlexAlign.Start)
-    .alignItems(HorizontalAlign.Start)
   }
 
   /**
-   * 获取提示点颜色
-   * @param dotType 提示点类型
-   * @returns 颜色值
+   * 单个提示点
    */
-  private getHintColor(dotType: string): string {
-    console.log(`=== getHintColor: dotType=${dotType}, hit color=${HintColors.hit}, pseudoHit color=${HintColors.pseudoHit}, miss color=${HintColors.miss} ===`);
-
-    if (dotType === 'hit') {
-      return '#4CAF50';  // Hardcoded GREEN for hits
-    } else if (dotType === 'pseudoHit') {
-      return '#FFC107';  // Hardcoded YELLOW for pseudo-hits
-    } else {
-      return '#E0E0E0';  // Hardcoded GRAY for misses
-    }
+  @Builder
+  HintDot(color: string, index: number) {
+    Row()
+      .width(this.dotSize)
+      .height(this.dotSize)
+      .backgroundColor(color)
+      .borderRadius(this.dotSize / 2)
+      .border({ width: 1, color: '#CCCCCC' })
   }
 
   /**
-   * 生成提示点数组
-   * @returns 提示点类型数组
+   * 获取简单模式的提示颜色（按位置）
    */
-  private generateHintDots(): string[] {
-    const dots: string[] = [];
-
-    console.log(`=== HintIndicator.generateHintDots: hits=${this.hits}, pseudoHits=${this.pseudoHits} ===`);
-    console.log(`=== positionHints: ${this.positionHints ? `[${this.positionHints.join(', ')}]` : 'undefined'} ===`);
-
-    // 判断是否为mapped模式（有positionHints）
-    if (this.positionHints && this.positionHints.length > 0) {
-      // Mapped模式：按位置对应生成提示点
-      console.log(`=== 使用Mapped模式：提示点与槽位一一对应 ===`);
-
-      for (let i = 0; i < this.positionHints.length; i++) {
-        const hint = this.positionHints[i];
-        dots.push(hint);
-
-        if (hint === 'hit') {
-          console.log(`=== 位置${i + 1}: HIT (绿色) → 第${i + 1}个提示点 = GREEN ===`);
-        } else if (hint === 'pseudoHit') {
-          console.log(`=== 位置${i + 1}: PSEUDO-HIT (黄色) → 第${i + 1}个提示点 = YELLOW ===`);
-        } else {
-          console.log(`=== 位置${i + 1}: MISS (灰色) → 第${i + 1}个提示点 = GRAY ===`);
-        }
-      }
-    } else {
-      // Unmapped模式：按类型分组生成提示点
-      console.log(`=== 使用Unmapped模式：提示点按类型分组 ===`);
-
-      // 添加绿点（位置和颜色都对）
-      for (let i = 0; i < this.hits; i++) {
-        dots.push('hit');
-        console.log(`=== Added hit dot ${i + 1}, color should be GREEN (#4CAF50) ===`);
-      }
-
-      // 添加黄点（颜色对位置错）
-      for (let i = 0; i < this.pseudoHits; i++) {
-        dots.push('pseudoHit');
-        console.log(`=== Added pseudoHit dot ${i + 1}, color should be YELLOW (#FFC107) ===`);
-      }
-
-      // 添加灰点（未中）填满到4个
-      const totalHits = this.hits + this.pseudoHits;
-      for (let i = totalHits; i < this.maxDots; i++) {
-        dots.push('miss');
-        console.log(`=== Added miss dot ${i + 1}, color should be GRAY (#E0E0E0) ===`);
+  private getDotColorByIndex(index: number): string {
+    if (this.positionHints && this.positionHints[index]) {
+      const hint = this.positionHints[index];
+      if (hint === 'hit') {
+        return '#4CAF50';  // 绿色
+      } else if (hint === 'pseudoHit') {
+        return '#FFC107';  // 黄色
       }
     }
+    return '#E0E0E0';  // 灰色/透明
+  }
 
-    console.log(`=== HintIndicator: Final dots array=[${dots.join(', ')}] ===`);
+  /**
+   * 获取困难模式的提示颜色（只显示数量，不区分位置）
+   */
+  private getTotalHitColor(): string {
+    // 困难模式：只按数量显示，不指明具体位置
+    // 显示顺序：绿色先，然后黄色，最后灰色
+    const total = this.hits + this.pseudoHits;
+    const greenDots = this.hits;
+    const yellowDots = this.pseudoHits;
 
-    return dots;
+    // 计算当前索引对应的颜色
+    if (this.hits > 0) {
+      // 还有绿色点
+      return '#4CAF50';
+    } else if (this.pseudoHits > 0) {
+      // 还有黄色点
+      return '#FFC107';
+    } else {
+      // 灰色
+      return '#E0E0E0';
+    }
   }
 }
