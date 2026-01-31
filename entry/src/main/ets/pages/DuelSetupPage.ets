@@ -1,0 +1,234 @@
+/**
+ * 双人对战设置页面
+ */
+
+import { Navigator } from '../utils/Navigator';
+import { LevelService } from '../services/LevelService';
+import { GameService } from '../services/GameService';
+import { Color } from '../constants/Colors';
+import { ResponsiveUtils, RF, RSP, RS } from '../utils/ResponsiveUtils';
+import { GamePageParams } from '../models/RouteParams';
+
+@Entry
+@Component
+struct DuelSetupPage {
+  @State colorCount: number = 4;
+  @State customPassword: (Color | null)[] = [null, null, null, null];
+  @State currentSlotIndex: number = 0;
+
+  async aboutToAppear() {
+    ResponsiveUtils.init();
+  }
+
+  build() {
+    Column() {
+      // 顶部导航栏
+      Row() {
+        Text('<')
+          .fontSize(ResponsiveUtils.rf(RF.BODY_L))
+          .fontColor('#212121')
+          .onClick(() => {
+            Navigator.pop();
+          })
+
+        Text('双人对战')
+          .fontSize(ResponsiveUtils.rf(RF.TITLE_M))
+          .fontWeight(FontWeight.Medium)
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+
+        Text('')
+          .width(ResponsiveUtils.rs(24))
+      }
+      .width('100%')
+      .padding({ left: ResponsiveUtils.rsp(RSP.M), right: ResponsiveUtils.rsp(RSP.M), top: ResponsiveUtils.rsp(RSP.XS), bottom: ResponsiveUtils.rsp(RSP.XS) })
+      .backgroundColor('#FFFFFF')
+
+      Scroll() {
+        Column() {
+          // 说明文字
+          Text('一名玩家设置密码，另一名玩家尝试破解')
+            .fontSize(ResponsiveUtils.rf(RF.BODY_M))
+            .fontColor('#757575')
+            .textAlign(TextAlign.Center)
+            .width('90%')
+            .margin({ top: ResponsiveUtils.rsp(RSP.L), bottom: ResponsiveUtils.rsp(RSP.L) })
+
+          // 颜色数量选择
+          Column() {
+            Text('选择颜色数量')
+              .fontSize(ResponsiveUtils.rf(RF.BODY_L))
+              .fontWeight(FontWeight.Medium)
+              .margin({ bottom: ResponsiveUtils.rsp(RSP.XS) })
+
+            Row({ space: ResponsiveUtils.rsp(RSP.XS) }) {
+              this.ColorCountButton(4, '4色')
+              this.ColorCountButton(5, '5色')
+              this.ColorCountButton(6, '6色')
+            }
+          }
+          .width('90%')
+          .alignItems(HorizontalAlign.Start)
+          .margin({ bottom: ResponsiveUtils.rsp(RSP.L) })
+
+          // 设置密码
+          Column() {
+            Text('设置密码（点击下方颜色）')
+              .fontSize(ResponsiveUtils.rf(RF.BODY_L))
+              .fontWeight(FontWeight.Medium)
+              .margin({ bottom: ResponsiveUtils.rsp(RSP.XS) })
+
+            // 密码槽位
+            Row({ space: ResponsiveUtils.rsp(RSP.XS) }) {
+              ForEach([0, 1, 2, 3], (index: number) => {
+                Column() {
+                  Circle()
+                    .fill(this.customPassword[index] ? this.getColorValue(this.customPassword[index]!) : '#E0E0E0')
+                    .width(ResponsiveUtils.rs(40))
+                    .height(ResponsiveUtils.rs(40))
+                    .border(this.currentSlotIndex === index ? {
+                      width: 2,
+                      color: '#2196F3',
+                      radius: 20
+                    } : {
+                      width: 1.5,
+                      color: '#BDBDBD',
+                      radius: 20
+                    })
+                    .onClick(() => {
+                      this.currentSlotIndex = index;
+                    })
+                }
+              })
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Center)
+            .margin({ bottom: ResponsiveUtils.rsp(RSP.M) })
+
+            // 颜色选择器
+            Row({ space: ResponsiveUtils.rs(8) }) {
+              ForEach(this.getAvailableColors(), (color: Color) => {
+                Circle()
+                  .fill(this.getColorValue(color))
+                  .width(ResponsiveUtils.rs(32))
+                  .height(ResponsiveUtils.rs(32))
+                  .onClick(() => {
+                    this.customPassword[this.currentSlotIndex] = color;
+                    if (this.currentSlotIndex < 3) {
+                      this.currentSlotIndex++;
+                    }
+                  })
+              })
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.SpaceEvenly)
+
+            // 操作按钮
+            Row({ space: ResponsiveUtils.rsp(RSP.XS) }) {
+              Button('清空')
+                .type(ButtonType.Normal)
+                .backgroundColor('#F5F5F5')
+                .fontColor('#212121')
+                .borderRadius(8)
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.customPassword = [null, null, null, null];
+                  this.currentSlotIndex = 0;
+                })
+
+              Button('开始对战')
+                .type(ButtonType.Normal)
+                .backgroundColor('#4CAF50')
+                .fontColor('#FFFFFF')
+                .borderRadius(8)
+                .layoutWeight(1)
+                .enabled(this.isPasswordComplete())
+                .onClick(() => {
+                  this.startDuelGame();
+                })
+            }
+            .width('100%')
+            .margin({ top: ResponsiveUtils.rsp(RSP.L) })
+          }
+          .width('90%')
+          .padding(ResponsiveUtils.rsp(RSP.M))
+          .backgroundColor('#FFFFFF')
+          .borderRadius(12)
+          .shadow({
+            radius: 4,
+            color: '#00000010',
+            offsetX: 0,
+            offsetY: 2
+          })
+        }
+        .width('100%')
+      }
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#FAFAFA')
+  }
+
+  @Builder
+  ColorCountButton(count: number, label: string) {
+    Button(label)
+      .type(ButtonType.Normal)
+      .backgroundColor(this.colorCount === count ? '#2196F3' : '#F5F5F5')
+      .fontColor(this.colorCount === count ? '#FFFFFF' : '#212121')
+      .borderRadius(8)
+      .width(ResponsiveUtils.rs(70))
+      .height(ResponsiveUtils.rs(36))
+      .fontSize(ResponsiveUtils.rf(RF.BODY_M))
+      .onClick(() => {
+        this.colorCount = count;
+        this.customPassword = [null, null, null, null];
+        this.currentSlotIndex = 0;
+      })
+  }
+
+  private getAvailableColors(): Color[] {
+    const allColors: Color[] = ['red', 'yellow', 'green', 'blue', 'purple', 'orange'];
+    return allColors.slice(0, this.colorCount);
+  }
+
+  private getColorValue(color: Color): string {
+    switch (color) {
+      case 'red':
+        return '#E53935';
+      case 'yellow':
+        return '#FDD835';
+      case 'green':
+        return '#43A047';
+      case 'blue':
+        return '#1E88E5';
+      case 'purple':
+        return '#8E24AA';
+      case 'orange':
+        return '#FB8C00';
+      default:
+        return '#000000';
+    }
+  }
+
+  private isPasswordComplete(): boolean {
+    return this.customPassword.every(c => c !== null);
+  }
+
+  private async startDuelGame() {
+    if (!this.isPasswordComplete()) {
+      return;
+    }
+
+    const password = this.customPassword as Color[];
+    const level = LevelService.generateDuelLevel(this.colorCount, password);
+
+    // 导航到游戏页面，使用duel模式
+    Navigator.pushParams<GamePageParams>({
+      mode: 'duel',
+      password: password
+    });
+
+    console.log('Starting duel game with password:', password);
+  }
+}

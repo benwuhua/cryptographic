@@ -1,0 +1,370 @@
+/**
+ * 游戏主页面
+ * 核心游戏玩法界面
+ */
+
+import { Navigator } from '../utils/Navigator';
+import { LevelRepository } from '../repositories/LevelRepository';
+import { UserRepository } from '../repositories/UserRepository';
+import { GameService } from '../services/GameService';
+import { LevelService } from '../services/LevelService';
+import { GameState, createInitialGameState, GameStatus } from '../models/GameState';
+import { Attempt } from '../models/Attempt';
+import { Color } from '../constants/Colors';
+import { GuessRow } from '../components/GuessRow';
+import { GameColorPicker } from '../components/GameColorPicker';
+import { GameConfig } from '../constants/GameConfig';
+import { Level } from '../models/Level';
+import { ResponsiveUtils, RF, RSP, RS } from '../utils/ResponsiveUtils';
+import { GameMode } from '../models/GameState';
+
+interface GamePageParamsType {
+  mode: GameMode;  // 使用 mode 字段（'solo' | 'practice' | 'duel'）
+  levelId?: number;
+  colorCount?: number;  // 练习模式的颜色数量
+}
+
+@Entry
+@Component
+struct GamePage {
+  @State gameState: GameState | null = null;
+  @State levelId: number = 1;
+  @State currentSlotIndex: number = 0;
+  @State isLoading: boolean = true;
+
+  async aboutToAppear() {
+    ResponsiveUtils.init();
+    await this.loadGameFromParams();
+  }
+
+  /**
+   * 页面显示时重新加载数据
+   * 修复切换页面后数据不刷新的bug
+   */
+  async onPageShow() {
+    console.log('=== GamePage onPageShow ===');
+    // 每次页面显示时重新加载数据，确保数据新鲜
+    await this.loadGameFromParams();
+  }
+
+  /**
+   * 从路由参数加载游戏
+   */
+  async loadGameFromParams() {
+    // 从路由参数获取关卡ID
+    const params = Navigator.getParams() as GamePageParamsType;
+    const levelIdParam = params?.levelId || 1;
+    const mode = params?.mode || 'solo';  // 使用 'mode' 字段
+    const isPracticeMode = mode === 'practice';  // 根据 mode 判断是否为练习模式
+    const colorCountParam = params?.colorCount;  // 获取colorCount参数
+
+    console.log(`=== loadGameFromParams: levelId=${levelIdParam}, mode=${mode}, isPracticeMode=${isPracticeMode}, colorCount=${colorCountParam} ===`);
+
+    await this.initGame(levelIdParam, isPracticeMode, colorCountParam);
+  }
+
+  /**
+   * 初始化游戏
+   */
+  async initGame(levelId: number, isPracticeMode: boolean, colorCount?: number) {
+    try {
+      let level: Level;
+      const params = Navigator.getParams() as GamePageParamsType;
+      const mode = params?.mode || 'solo';
+      const isDuelMode = mode === 'duel';
+
+      if (isDuelMode) {
+        // 双人对战模式：使用传入的colorCount生成关卡
+        const duelColorCount = colorCount || 4;
+        level = LevelService.generateDuelLevel(duelColorCount);
+        console.log(`=== Duel mode: using colorCount=${duelColorCount} ===`);
+      } else if (isPracticeMode) {
+        // 练习模式：优先使用传入的colorCount参数，如果没有则根据用户进度决定
+        let practiceColorCount = 4;
+
+        if (colorCount !== undefined) {
+          // 使用用户选择的颜色数量
+          practiceColorCount = colorCount;
+          console.log(`=== Practice mode: using user-selected colorCount=${practiceColorCount} ===`);
+        } else {
+          // 回退到根据用户进度决定颜色数量（向后兼容）
+          const userProgress = await UserRepository.getUserProgress();
+
+          // 根据已解锁关卡决定练习模式颜色数量
+          const totalUnlocked = userProgress.easyUnlocked + userProgress.hardUnlocked;
+          if (totalUnlocked > 100) {
+            practiceColorCount = 6; // 已解锁6色关卡
+          } else if (totalUnlocked > 50) {
+            practiceColorCount = 5; // 已解锁5色关卡
+          }
+
+          console.log(`=== Practice mode: using ${practiceColorCount} colors based on unlocked levels: easy=${userProgress.easyUnlocked}, hard=${userProgress.hardUnlocked} ===`);
+        }
+
+        level = LevelService.generatePracticeLevel(practiceColorCount);
+      } else {
+        // 普通模式：加载关卡
+        level = await LevelRepository.getLevel(levelId);
+      }
+
+      this.levelId = levelId;
+      this.gameState = GameService.createGame(level, isDuelMode ? 'duel' : (isPracticeMode ? 'practice' : 'solo'));
+      this.currentSlotIndex = 0;
+      this.isLoading = false;
+
+      console.log(`=== Game initialized: mode=${mode}, colorCount=${level.colorCount}, password=[${level.password.join(', ')}] ===`);
+    } catch (error) {
+      console.error('Failed to init game:', error);
+      this.isLoading = false;
+    }
+  }
+
+  build() {
+    Column() {
+      if (this.isLoading || !this.gameState) {
+        // 加载状态
+        Column() {
+          LoadingProgress()
+            .width(ResponsiveUtils.rs(50))
+            .height(ResponsiveUtils.rs(50))
+            .color('#2196F3')
+          Text('加载关卡中...')
+            .fontSize(ResponsiveUtils.rf(RF.BODY_M))
+            .fontColor('#757575')
+            .margin({ top: ResponsiveUtils.rsp(RSP.M) })
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+      } else {
+        // 顶部信息栏
+        Row() {
+          // 返回按钮
+          Text('✕')
+            .fontSize(ResponsiveUtils.rf(RF.BODY_L))
+            .fontColor('#757575')
+            .onClick(() => {
+              Navigator.pop();
+            })
+
+          // 关卡信息
+          Column() {
+            Text(`关卡 ${this.levelId}`)
+              .fontSize(ResponsiveUtils.rf(RF.BODY_L))
+              .fontWeight(FontWeight.Medium)
+
+            Text(`剩余次数: ${GameService.getRemainingAttempts(this.gameState!)}`)
+              .fontSize(ResponsiveUtils.rf(RF.BODY_S))
+              .fontColor('#757575')
+              .margin({ top: ResponsiveUtils.rsp(RSP.XXS) })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          .margin({ left: ResponsiveUtils.rsp(RSP.XS) })
+
+          // 提示按钮
+          if (this.gameState.level.hintMode === 'mapped') {
+            Text('💡')
+              .fontSize(ResponsiveUtils.rf(RF.BODY_L))
+              .onClick(() => {
+                // TODO: 实现提示功能
+              })
+          }
+        }
+        .width('100%')
+        .padding({ left: ResponsiveUtils.rsp(RSP.S), right: ResponsiveUtils.rsp(RSP.S), top: ResponsiveUtils.rsp(RSP.XXS), bottom: ResponsiveUtils.rsp(RSP.XXS) })
+        .backgroundColor('#FFFFFF')
+
+        // 猜测历史区域
+        Scroll() {
+          Column() {
+            // 显示所有历史猜测
+            ForEach(this.gameState.attempts, (attempt: Attempt, index: number) => {
+              GuessRow({
+                guess: attempt.guess,
+                hits: attempt.hits,
+                pseudoHits: attempt.pseudoHits,
+                positionHints: attempt.positionHints,  // 传递位置提示
+                showHints: true
+              })
+            }, (attempt: Attempt, index: number) => `attempt_${index}`)
+
+            // 当前正在输入的猜测
+            GuessRow({
+              guess: this.gameState.currentGuess.map(c => c || null) as Color[],
+              hits: 0,
+              pseudoHits: 0,
+              isActive: true,
+              showHints: false
+            })
+          }
+          .width('100%')
+        }
+        .layoutWeight(1)
+        .scrollBar(BarState.Auto)
+        .align(Alignment.Bottom)
+
+        // 当前选择槽位指示器
+        Row() {
+          ForEach([0, 1, 2, 3], (index: number) => {
+            Column() {
+              Circle()
+                .fill(this.currentSlotIndex === index ? '#2196F3' : '#E0E0E0')
+                .width(ResponsiveUtils.rs(RS.DOT_SIZE))
+                .height(ResponsiveUtils.rs(RS.DOT_SIZE))
+            }
+            .layoutWeight(1)
+          })
+        }
+        .width('100%')
+        .padding(ResponsiveUtils.rsp(RSP.XS))
+        .backgroundColor('#F5F5F5')
+
+        // 颜色选择器
+        Column() {
+          GameColorPicker({
+            availableColors: this.getAvailableColors(),
+            selectedColor: this.getSelectedColor(),
+            onColorSelect: (color: Color) => {
+              this.onColorSelect(color);
+            }
+          })
+
+          // 操作按钮
+          Row({ space: ResponsiveUtils.rsp(RSP.XS) }) {
+            // 清空按钮
+            Button('清空')
+              .type(ButtonType.Normal)
+              .backgroundColor('#F5F5F5')
+              .fontColor('#212121')
+              .borderRadius(8)
+              .layoutWeight(1)
+              .onClick(() => {
+                this.clearGuess();
+              })
+
+            // 确认按钮
+            Button('确认')
+              .type(ButtonType.Normal)
+              .backgroundColor('#2196F3')
+              .fontColor('#FFFFFF')
+              .borderRadius(8)
+              .layoutWeight(1)
+              .enabled(GameService.isCurrentGuessComplete(this.gameState!))
+              .onClick(() => {
+                this.submitGuess();
+              })
+          }
+          .width('90%')
+          .padding({ bottom: ResponsiveUtils.rsp(RSP.S) })  // 减少底部间距
+        }
+        .backgroundColor('#FFFFFF')
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#FAFAFA')
+  }
+
+  /**
+   * 获取可用颜色列表
+   */
+  private getAvailableColors(): Color[] {
+    const allColors: Color[] = ['red', 'yellow', 'green', 'blue', 'purple', 'orange'];
+    const availableColors = allColors.slice(0, this.gameState!.level.colorCount);
+
+    console.log(`=== getAvailableColors: colorCount=${this.gameState!.level.colorCount}, colors=[${availableColors.join(', ')}] ===`);
+
+    return availableColors;
+  }
+
+  /**
+   * 获取当前选中槽位的颜色
+   */
+  private getSelectedColor(): Color | null {
+    return this.gameState!.currentGuess[this.currentSlotIndex];
+  }
+
+  /**
+   * 选择颜色
+   */
+  private onColorSelect(color: Color) {
+    if (this.currentSlotIndex >= 0 && this.currentSlotIndex < GameConfig.PASSWORD_LENGTH) {
+      this.gameState = GameService.updateCurrentGuess(
+        this.gameState!,
+        this.currentSlotIndex,
+        color
+      );
+
+      // 自动移动到下一个槽位
+      if (this.currentSlotIndex < GameConfig.PASSWORD_LENGTH - 1) {
+        this.currentSlotIndex++;
+      }
+    }
+  }
+
+  /**
+   * 清空当前猜测
+   */
+  private clearGuess() {
+    this.gameState = GameService.clearCurrentGuess(this.gameState!);
+    this.currentSlotIndex = 0;
+  }
+
+  /**
+   * 提交猜测
+   */
+  private async submitGuess() {
+    if (!this.gameState || !GameService.isCurrentGuessComplete(this.gameState)) {
+      return;
+    }
+
+    // 提交猜测
+    this.gameState = GameService.submitGuess(
+      this.gameState,
+      this.gameState.currentGuess as Color[]
+    );
+
+    // 检查游戏是否结束
+    if (GameService.isGameEnd(this.gameState)) {
+      await this.handleGameEnd();
+    } else {
+      // 重置槽位选择
+      this.currentSlotIndex = 0;
+    }
+  }
+
+  /**
+   * 处理游戏结束
+   */
+  private async handleGameEnd() {
+    if (!this.gameState) return;
+
+    const isWin = GameService.isWin(this.gameState);
+    const currentTime = Date.now();
+    const timeSpent = currentTime - this.gameState.startTime;
+
+    if (isWin) {
+      // 保存胜利结果
+      await UserRepository.handleGameWin(
+        this.levelId,
+        this.gameState.attempts.length,
+        this.gameState.level.maxAttempts
+      );
+    } else {
+      // 保存失败结果
+      await UserRepository.handleGameLose();
+    }
+
+    // 跳转到结果页面
+    Navigator.pushResult({
+      mode: this.gameState.mode,
+      levelId: this.levelId,
+      isWin,
+      attempts: this.gameState.attempts.length,
+      maxAttempts: this.gameState.level.maxAttempts,
+      timeSpent,
+      password: this.gameState.level.password
+    });
+  }
+}

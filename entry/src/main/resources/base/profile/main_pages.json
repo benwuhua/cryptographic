@@ -1,0 +1,11 @@
+{
+  "src": [
+    "pages/HomePage",
+    "pages/LevelSelectPage",
+    "pages/GamePage",
+    "pages/ResultPage",
+    "pages/DuelSetupPage",
+    "pages/PracticePage",
+    "pages/SettingsPage"
+  ]
+}

@@ -1,0 +1,243 @@
+/**
+ * 游戏结果页面
+ * 显示胜利或失败结果
+ */
+
+import { Navigator } from '../utils/Navigator';
+import { GameService } from '../services/GameService';
+import { UserRepository } from '../repositories/UserRepository';
+import { Color } from '../constants/Colors';
+import { ColorValues } from '../constants/Colors';
+import { StarRating } from '../components/StarRating';
+import { ColorSlot } from '../components/ColorSlot';
+import { ResponsiveUtils, RF, RSP, RS } from '../utils/ResponsiveUtils';
+
+interface ResultParams {
+  levelId: number;
+  isWin: boolean;
+  attempts: number;
+  maxAttempts: number;
+  password: Color[];
+}
+
+@Entry
+@Component
+struct ResultPage {
+  @State levelId: number = 1;
+  @State isWin: boolean = false;
+  @State attempts: number = 0;
+  @State maxAttempts: number = 7;
+  @State stars: number = 0;
+  @State password: Color[] = [];
+  @State nextLevelId: number | null = null;
+
+  async aboutToAppear() {
+    ResponsiveUtils.init();
+    // 从路由参数获取结果数据
+    const params = Navigator.getParams() as ResultParams;
+
+    if (params) {
+      this.levelId = params.levelId;
+      this.isWin = params.isWin;
+      this.attempts = params.attempts;
+      this.maxAttempts = params.maxAttempts;
+      this.password = params.password;
+
+      // 计算星级
+      if (this.isWin) {
+        this.stars = GameService.calculateStars(this.attempts, this.maxAttempts);
+      }
+
+      // 获取下一关
+      this.nextLevelId = await this.getNextLevel();
+    }
+  }
+
+  /**
+   * 获取下一关卡ID
+   */
+  private async getNextLevel(): Promise<number | null> {
+    try {
+      const progress = await UserRepository.getUserProgress();
+      let nextLevel: number | null = null;
+
+      if (this.levelId <= 100) {
+        // 初级模式
+        if (this.levelId < progress.easyUnlocked && this.levelId < 100) {
+          nextLevel = this.levelId + 1;
+        }
+      } else {
+        // 高级模式
+        const hardLevelId = this.levelId - 100;
+        if (hardLevelId < progress.hardUnlocked && hardLevelId < 500) {
+          nextLevel = this.levelId + 1;
+        }
+      }
+
+      return nextLevel;
+    } catch (error) {
+      console.error('Failed to get next level:', error);
+      return null;
+    }
+  }
+
+  build() {
+    Column() {
+      // 顶部结果图标和标题
+      Column() {
+        Text(this.isWin ? '🎉' : '😔')
+          .fontSize(ResponsiveUtils.rf(RF.TITLE_XL) * 2)
+          .margin({ bottom: ResponsiveUtils.rsp(RSP.L) })
+
+        Text(this.isWin ? '破解成功!' : '破解失败')
+          .fontSize(ResponsiveUtils.rf(RF.TITLE_L))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.isWin ? '#4CAF50' : '#F44336')
+
+        if (this.isWin) {
+          StarRating({
+            stars: this.stars,
+            starSize: ResponsiveUtils.rs(RS.ICON_SIZE)
+          })
+            .margin({ top: ResponsiveUtils.rsp(RSP.XS) })
+        }
+      }
+      .margin({ top: ResponsiveUtils.rsp(RSP.XXL), bottom: ResponsiveUtils.rsp(RSP.L) })
+
+      // 结果详情卡片
+      Column() {
+        // 关卡信息
+        this.ResultItem('关卡', `第 ${this.levelId} 关`)
+        this.ResultDivider()
+
+        // 尝试次数
+        this.ResultItem('尝试次数', `${this.attempts} / ${this.maxAttempts}`)
+        this.ResultDivider()
+
+        // 正确密码
+        Column() {
+          Text('正确密码')
+            .fontSize(ResponsiveUtils.rf(RF.BODY_M))
+            .fontColor('#757575')
+
+          Row({ space: ResponsiveUtils.rsp(RSP.XS) }) {
+            ForEach(this.password, (color: Color) => {
+              ColorSlot({
+                color: color,
+                slotSize: ResponsiveUtils.rs(40),
+                isClickable: false
+              })
+            })
+          }
+          .margin({ top: ResponsiveUtils.rsp(RSP.XS) })
+        }
+        .width('100%')
+        .padding(ResponsiveUtils.rsp(RSP.XS))
+
+        if (this.isWin) {
+          this.ResultDivider()
+          this.ResultItem('评价', this.getStarComment())
+        }
+      }
+      .width('90%')
+      .backgroundColor('#FFFFFF')
+      .borderRadius(12)
+      .shadow({
+        radius: 8,
+        color: '#00000015',
+        offsetX: 0,
+        offsetY: 2
+      })
+      .margin({ bottom: ResponsiveUtils.rsp(RSP.L) })
+
+      Blank()
+
+      // 操作按钮
+      Column({ space: ResponsiveUtils.rsp(RSP.XS) }) {
+        // 下一关按钮
+        if (this.isWin && this.nextLevelId) {
+          Button('下一关')
+            .type(ButtonType.Normal)
+            .backgroundColor('#2196F3')
+            .fontColor('#FFFFFF')
+            .borderRadius(8)
+            .width('90%')
+            .height(RS.BUTTON_HEIGHT)
+            .onClick(() => {
+              Navigator.replaceGame(this.nextLevelId!);
+            })
+        }
+
+        // 重新挑战
+        Button('重新挑战')
+          .type(ButtonType.Normal)
+          .backgroundColor(this.isWin ? '#F5F5F5' : '#FF9800')
+          .fontColor(this.isWin ? '#212121' : '#FFFFFF')
+          .borderRadius(8)
+          .width(this.isWin ? '90%' : '90%')
+          .height(RS.BUTTON_HEIGHT)
+          .onClick(() => {
+            Navigator.replaceGame(this.levelId);
+          })
+
+        // 返回关卡选择
+        Button('返回关卡选择')
+          .type(ButtonType.Normal)
+          .backgroundColor('#FFFFFF')
+          .fontColor('#757575')
+          .borderRadius(8)
+          .width('90%')
+          .height(RS.BUTTON_HEIGHT)
+          .onClick(() => {
+            Navigator.pushLevelSelect(this.levelId <= 100 ? 'easy' : 'hard');
+          })
+      }
+      .padding({ bottom: ResponsiveUtils.rsp(RSP.L) })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#FAFAFA')
+  }
+
+  @Builder
+  ResultItem(label: string, value: string) {
+    Row() {
+      Text(label)
+        .fontSize(ResponsiveUtils.rf(RF.BODY_M))
+        .fontColor('#757575')
+        .width(ResponsiveUtils.rs(100))
+
+      Text(value)
+        .fontSize(ResponsiveUtils.rf(RF.BODY_L))
+        .fontColor('#212121')
+        .layoutWeight(1)
+        .textAlign(TextAlign.End)
+    }
+    .width('100%')
+    .padding(ResponsiveUtils.rsp(RSP.XS))
+  }
+
+  @Builder
+  ResultDivider() {
+    Divider()
+      .color('#E0E0E0')
+      .strokeWidth(1)
+      .margin({ left: ResponsiveUtils.rsp(RSP.XS), right: ResponsiveUtils.rsp(RSP.XS) })
+  }
+
+  /**
+   * 获取星级评价
+   */
+  private getStarComment(): string {
+    switch (this.stars) {
+      case 3:
+        return '完美破解！';
+      case 2:
+        return '表现不错！';
+      case 1:
+        return '继续努力！';
+      default:
+        return '';
+    }
+  }
+}
