@@ -19,7 +19,7 @@ import { PositionHint } from '../services/GameService';
 export struct HintIndicator {
   @Prop hits: number = 0;          // 命中数（位置颜色都对）
   @Prop pseudoHits: number = 0;    // 伪命中数（颜色对位置错）
-  @Prop positionHints?: PositionHint[];  // 位置级别的提示（mapped模式）
+  @Prop positionHints: PositionHint[] = [];  // 位置级别的提示（mapped模式）
   @Prop dotSize: number = 12;      // 提示点大小
   @Prop maxDots: number = 4;       // 最大显示点数
   @Prop hintPosition: 'bottom' | 'right' = 'right';  // 提示位置

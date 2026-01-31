@@ -19,7 +19,7 @@ export struct GuessRow {
   @Prop guess: Color[];
   @Prop hits: number = 0;
   @Prop pseudoHits: number = 0;
-  @Prop positionHints?: PositionHint[];  // 位置级别的提示
+  @Prop positionHints: PositionHint[] = [];  // 位置级别的提示
   @Prop slotSize: number = 40;
   @Prop isActive: boolean = false;
   @Prop showHints: boolean = true;

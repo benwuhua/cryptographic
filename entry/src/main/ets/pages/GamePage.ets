@@ -186,7 +186,7 @@ struct GamePage {
                 pseudoHits: attempt.pseudoHits,
                 positionHints: attempt.positionHints,
                 showHints: true,
-                hintPosition: this.gameState.level.hintPosition
+                hintPosition: this.gameState?.level?.hintPosition || 'right'
               })
             }, (attempt: Attempt, index: number) => `attempt_${index}`)
 
@@ -197,7 +197,7 @@ struct GamePage {
               pseudoHits: 0,
               isActive: true,
               showHints: false,
-              hintPosition: this.gameState.level.hintPosition
+              hintPosition: this.gameState?.level?.hintPosition || 'right'
             })
           }
           .width('100%')
